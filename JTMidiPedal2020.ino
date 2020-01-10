@@ -144,9 +144,18 @@ void setup() {
   for (int n = 0; n < NUM_SLIDERS; n++) {
     analog_reads[n].setActivityThreshold(RAR_ACTIVITY_THRESHOLD);
   }
+                                      //to save sysexin here is a way to factory reset using
+                                      //the state of the pedals
 
-  load_config();            // load configuration from eeprom
-  Serial.print("Started");  //tell the worl we have hot this far
+  if ( digitalRead(0) == LOW) {
+     Serial.println("Factory Reset");   
+     save_config();                   //which will be the default state of the struct config is in                                                  
+  }            
+                                      //if factory default we could skit this but it take ms
+  
+  load_config();                      // load configuration from eeprom
+ 
+  Serial.print("Started");            // tell the world we have hot this far
 }
 
 //===================================================================================================
