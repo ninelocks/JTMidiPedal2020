@@ -1,0 +1,12 @@
+ 
+
+#2020-01-07 
+#jont@ninelocks.com
+Example sysex send using linux command amidi
+
+
+the port number will change, to find current port numberamidi -l
+ours with different sysex order
+
+amidi  -p hw:1,0,0 -S 'F0 7D 4A 6F 6D 54 01 01  00 0b 51 40 41 0 0 F7' 
+
