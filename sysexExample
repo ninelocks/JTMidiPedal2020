@@ -10,3 +10,8 @@ ours with different sysex order
 
 amidi  -p hw:1,0,0 -S 'F0 7D 4A 6F 6D 54 01 01  00 0b 51 40 41 0 0 F7' 
 
+#now we have midi channels sent as well so
+
+
+amidi  -p hw:1,0,0 -S 'F0 7D 4A 6F 6D 54 01 01  01 02 03 04 0b 51 40 41 0 0 F7' 
+

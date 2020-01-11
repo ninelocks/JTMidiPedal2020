@@ -4,6 +4,14 @@
 #include <EEPROM.h>
 
 /*
+ Revision History
+
+ 2020/01/11 Changed sysex so that each control can have midi channel set independently
+
+ */
+ 
+ /*
+  * 
      Midi footswitch and volume/wah pedal controller
      J.Trinder jont<at>ninelocks.com January 2020
 
@@ -86,12 +94,15 @@ const int RAR_ACTIVITY_THRESHOLD = 25;  // ResponsiveAnalogRead threshold
 
 struct config_record {
   byte chnl; //midi channel
+  byte buttonChannel[NUM_BUTTONS] = {0, 0};     //button midi channels
+  byte sliderChannel[NUM_SLIDERS] = {0, 0};   //slider midi channels
   bool btnmode[NUM_BUTTONS] = {0, 0}; //0 for normal 1 for toggle
-
+ 
   /*
        note the controller numbers here are in, *shudder* decimal
        not hex
   */
+          
   byte slider_c_number[NUM_SLIDERS] =  {11, 81};    //the controller number
   byte button_c_number[NUM_BUTTONS] =  {64, 65};    //the controller number
 };
@@ -268,7 +279,7 @@ void jtGetAnalogData() {
                                               // if so send it and save the value so next time around
                                               // we know what its value WAS
     if (valX != rtr.adc_prev[n]) {
-      usbMIDI.sendControlChange(conf.slider_c_number[n], valX, conf.chnl); // calculate CC for analog   and send
+      usbMIDI.sendControlChange(conf.slider_c_number[n], valX, conf.sliderChannel[n]); // calculate CC for analog   and send
       rtr.adc_prev[n] = valX;
     }
 
@@ -289,11 +300,11 @@ void getDigitalData() {
     button[i].update(); //update bounce object for each button
     if (button[i].fallingEdge()) { // button press to ground
       if (rtr.toggled[i] && conf.btnmode[i] == 1) { // if toggled state and toggle behavoiour both true...
-        usbMIDI.sendControlChange(conf.button_c_number[i], 0, conf.chnl);  // unlatch to OFF
+        usbMIDI.sendControlChange(conf.button_c_number[i], 0, conf.buttonChannel[i]);  // unlatch to OFF
         rtr.toggled[i] = false      ;  // toggled to false for next time
       }
       else { // either latched and toggled==false or non-latched...
-        usbMIDI.sendControlChange(conf.button_c_number[i], 127, conf.chnl); //...either way to to ON state
+        usbMIDI.sendControlChange(conf.button_c_number[i], 127, conf.buttonChannel[i]); //...either way to to ON state
         if (conf.btnmode[i] == 1) {
           rtr.toggled[i] = true      ;  // but only change toggled state if in latched mode
         }
@@ -301,7 +312,7 @@ void getDigitalData() {
     }
     if (button[i].risingEdge()) { // button release - pullup to HIGH
       if (not(conf.btnmode[i] == 1)) { // if non-latched
-        usbMIDI.sendControlChange(conf.button_c_number[i], 0, conf.chnl);  // to to OFF
+        usbMIDI.sendControlChange(conf.button_c_number[i], 0, conf.buttonChannel[i]);  // to to OFF
       }
     }
   }
@@ -330,14 +341,17 @@ void getDigitalData() {
    5 0x54  // T
    6 0xNN  // our product number /id not used yet
    7 0xXX   // for future use possibly version number
-   8       // midi channel
-   9       // pedal 0 controller number
-   10      // pedal 1 controller number
-   11      // switch 0 controller number
-   12      // switch 0 toggle mode
-   13      // switch 1 controller number
-   14      // switch 1 toggle mode (1 is yes)
-   15 0xF7 //end of sysex marker
+   8       // midi channel slider 1
+   9       // midi channel slider 2
+   10      // midi channel button 1
+   11      // midi channel button 2 
+   12       // pedal 0 controller number
+   13      // pedal 1 controller number
+   14      // switch 0 controller number
+   15      // switch 0 toggle mode
+   16      // switch 1 controller number
+   17      // switch 1 toggle mode (1 is yes)
+   18 0xF7 //end of sysex marker
 */
 //************SYSEX SECTION**************
 void doSysEx() {
@@ -354,17 +368,12 @@ void doSysEx() {
   
   byte *sysExBytes = usbMIDI.getSysExArray();
   if (sysExBytes[0] == 0xf0
-      && sysExBytes[15] == 0xf7 // ************ count how long our message should be and put it in here
+      && sysExBytes[18] == 0xf7 // ************ count how long our message should be and put it in here
       && sysExBytes[1]  == 0x7D // 7D is private use (non-commercial)
       && sysExBytes[2]  == 0x4A // 4-byte 'key' - JonT in hex
       && sysExBytes[3]  == 0x6F
       && sysExBytes[4]  == 0x6d
       && sysExBytes[5]  == 0x54) { // read and compare static bytes to ensure valid msg
-
- 
-                                                     
-    
-     
    
     digitalWrite(ledPin, !digitalRead(ledPin));     // invert the led output so led changes on to off
                                                     // or off to on, each time we recive a sysex aimed
@@ -376,20 +385,32 @@ void doSysEx() {
        if moving to a setup where variable number could be downloaded then check counts to make sure we dont try and access beyone array
     */
 
+
+    for (int n = 0; n < NUM_SLIDERS; n++)
+    {
+        conf.sliderChannel[n] = sysExBytes[8 + n];
+    }
+
+    for (int n = 0; n < NUM_BUTTONS; n++)
+    {
+       conf.buttonChannel[n] = sysExBytes[10 + n];
+    }
+ 
+
     conf.chnl = sysExBytes[8];
     for (int n = 0; n < NUM_SLIDERS; n++)
     {
-      conf.slider_c_number[n] = sysExBytes[9 + n];
+      conf.slider_c_number[n] = sysExBytes[12 + n];
     }
     //load button channel numbers
     for (int n = 0; n < NUM_BUTTONS; n++)
     {
-      conf.button_c_number[n] = sysExBytes[11 + n];
+      conf.button_c_number[n] = sysExBytes[14 + n];
     }
     //load button toggle mode
     for (int n = 0; n < NUM_BUTTONS; n++)
     {
-      conf.btnmode[n] = sysExBytes[13 + n];
+      conf.btnmode[n] = sysExBytes[16 + n];
     }
 
     save_config();
