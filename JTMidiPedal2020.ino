@@ -5,8 +5,15 @@
 
 /*
  Revision History
+2020/01/14 
 
- 2020/01/11 Changed sysex so that each control can have midi channel set independently
+added led to connect externally to alert/show activity
+added extra switch channels, so now 5 on/off inputs and 2 analogue(exp pedals)
+modified sysex handler to be more compact and hopefully less prone to errors
+added routine to flash the external led so can communicate errors etc etc
+added flashes to indicate good/bad sysex see sysex receive function 
+
+2020/01/11 Changed sysex so that each control can have midi channel set independently
 
  */
  
@@ -56,14 +63,14 @@
 */
 /**************************************************************************/
 
-#define NUM_BUTTONS 2     // Buttons are simple digital inputs
+#define NUM_BUTTONS 5     // Buttons are simple digital inputs
 #define NUM_SLIDERS 2     // slider are analog inputs, pots, sliders, 
 // expression pedals
 
 
 const int main_delay = 5; // Delay between polling the switches and sliders
-const int ledPin    = 13; // A led that can be flashed to help debugging etc
- 
+const int ledPin    = 13; // On board led that can be flashed to help debugging etc
+const int ledPinB   = 5;  // An external led 
 
 
 const int RAR_ACTIVITY_THRESHOLD = 25;  // ResponsiveAnalogRead threshold
@@ -94,9 +101,9 @@ const int RAR_ACTIVITY_THRESHOLD = 25;  // ResponsiveAnalogRead threshold
 
 struct config_record {
   byte chnl; //midi channel
-  byte buttonChannel[NUM_BUTTONS] = {0, 0};     //button midi channels
+  byte buttonChannel[NUM_BUTTONS] = {0, 0, 0, 0, 0};     //button midi channels
   byte sliderChannel[NUM_SLIDERS] = {0, 0};   //slider midi channels
-  bool btnmode[NUM_BUTTONS] = {0, 0}; //0 for normal 1 for toggle
+  bool btnmode[NUM_BUTTONS] = {0, 0, 0, 0, 0}; //0 for normal 1 for toggle
  
   /*
        note the controller numbers here are in, *shudder* decimal
@@ -104,7 +111,7 @@ struct config_record {
   */
           
   byte slider_c_number[NUM_SLIDERS] =  {11, 81};    //the controller number
-  byte button_c_number[NUM_BUTTONS] =  {64, 65};    //the controller number
+  byte button_c_number[NUM_BUTTONS] =  {64, 65, 66, 67, 68};    //the controller number
 };
 
 /*
@@ -115,7 +122,7 @@ struct config_record {
 
 struct runtime_record {
   int adc_prev[NUM_SLIDERS];                  //slider previous value
-  bool toggled[NUM_BUTTONS] = {false, false}; //  toggle indicates when toggle  in effect
+  bool toggled[NUM_BUTTONS] = {false, false, false , false, false}; //  toggle indicates when toggle  in effect
 };
 
 //now define variable that we use to reference the structs
@@ -125,7 +132,7 @@ struct runtime_record rtr;
 
 //button debounce objects
 
-Bounce button[3] = {Bounce(0, 5), Bounce(1, 5), Bounce(2, 5)}; // init 'bounce' for 3 buttons
+Bounce button[5] = {Bounce(0, 5), Bounce(1, 5), Bounce(2, 5), Bounce(3, 5), Bounce(4, 5)}; // init 'bounce' for 5 buttons
 
 
 // ResponsiveAnalogRead objects
@@ -146,9 +153,13 @@ void setup() {
   delay(500);
 
   pinMode(ledPin, OUTPUT);
+  pinMode(ledPinB, OUTPUT);
   pinMode(0, INPUT_PULLUP); // set up three digital pins
   pinMode(1, INPUT_PULLUP); // with PULLUPs
-  pinMode(2, INPUT_PULLUP); // not used but for test purpose
+  pinMode(2, INPUT_PULLUP); //  
+  pinMode(3, INPUT_PULLUP); //  
+  pinMode(4, INPUT_PULLUP); //  
+  
 
   // init the thresholds for the ResponsiveAnalogeRead objects
 
@@ -160,13 +171,16 @@ void setup() {
 
   if ( digitalRead(0) == LOW) {
      Serial.println("Factory Reset");   
-     save_config();                   //which will be the default state of the struct config is in                                                  
+     save_config();                   //which will be the default state of the struct config is in    
+     blink_n_times(5,100,100);                                              
   }            
                                       //if factory default we could skit this but it take ms
   
   load_config();                      // load configuration from eeprom
  
   Serial.print("Started");            // tell the world we have hot this far
+  digitalWrite(ledPinB, false);
+  blink_n_times(2,200,100);
 }
 
 //===================================================================================================
@@ -341,20 +355,47 @@ void getDigitalData() {
    5 0x54  // T
    6 0xNN  // our product number /id not used yet
    7 0xXX   // for future use possibly version number
+   
    8       // midi channel slider 1
    9       // midi channel slider 2
+  
    10      // midi channel button 1
    11      // midi channel button 2 
-   12       // pedal 0 controller number
-   13      // pedal 1 controller number
-   14      // switch 0 controller number
-   15      // switch 0 toggle mode
-   16      // switch 1 controller number
-   17      // switch 1 toggle mode (1 is yes)
-   18 0xF7 //end of sysex marker
+   12      // midi channel button 3
+   13      // midi channel button 4 
+   14      // midi channel button 5
+ 
+   
+   15      // slider 1 controller number
+   16      // slider 2 controller number
+   
+   17      // switch 1 controller number
+   18      // switch 2 controller number
+   19      // switch 3 controller number
+   20      // switch 4 controller number
+   21      // switch 5 controller number
+   
+   22      // switch 1 toggle mode (1 is yes)
+   23      // switch 2 toggle mode (1 is yes)
+   24      // switch 3 toggle mode (1 is yes)
+   25      // switch 4 toggle mode (1 is yes)
+   26      // switch 5 toggle mode (1 is yes)   
+   
+   27 0xF7 //end of sysex marker
+   // these specifiy where each parameters collection starts in the array
 */
+
+ 
+
+
 //************SYSEX SECTION**************
 void doSysEx() {
+
+const int SLIDER_CHANNEL_BASE = 8;                  //these are used show where different parts of the sysex are within                                               
+const int SWITCH_CHANNEL_BASE = 10;                 //the received sysex array
+const int SLIDER_CONTROL_ID_BASE = 15;
+const int SWITCH_CONTROL_ID_BASE = 17;
+const int SWITCH_TOGGLE_BASE = 22;
 
   // its got more convoluted than the setup by oddson
   // from https://forum.pjrc.com/threads/24537-Footsy-Teensy-2-based-MIDI-foot-pedal-controller
@@ -362,23 +403,22 @@ void doSysEx() {
   // eg having one of the sysexbytes specify how many sliders/buttons there are in use
  
   // Serial.println("sysex rx");
-
-   
- 
+  
   
   byte *sysExBytes = usbMIDI.getSysExArray();
   if (sysExBytes[0] == 0xf0
-      && sysExBytes[18] == 0xf7 // ************ count how long our message should be and put it in here
+      && sysExBytes[27] == 0xf7 // ************ count how long our message should be and put it in here
       && sysExBytes[1]  == 0x7D // 7D is private use (non-commercial)
       && sysExBytes[2]  == 0x4A // 4-byte 'key' - JonT in hex
       && sysExBytes[3]  == 0x6F
       && sysExBytes[4]  == 0x6d
       && sysExBytes[5]  == 0x54) { // read and compare static bytes to ensure valid msg
    
-    digitalWrite(ledPin, !digitalRead(ledPin));     // invert the led output so led changes on to off
+    digitalWrite(ledPin, !digitalRead(ledPin));     // invert the led on the board output so led changes on to off
                                                     // or off to on, each time we recive a sysex aimed
                                                     // at us with the correct header  
-
+                                                
+    blink_n_times(1,50,50);  // blink our external LED to show sys looked ok -ish
     /*
        jt will add a program version id field in case we want to change it in future and do fancy stuff
        as we check position of systex end , the F7, we know we have correct number of bytes
@@ -388,31 +428,20 @@ void doSysEx() {
 
     for (int n = 0; n < NUM_SLIDERS; n++)
     {
-        conf.sliderChannel[n] = sysExBytes[8 + n];
+        conf.sliderChannel[n] = sysExBytes[SLIDER_CHANNEL_BASE + n];
+        conf.slider_c_number[n] = sysExBytes[SLIDER_CONTROL_ID_BASE + n];
     }
 
     for (int n = 0; n < NUM_BUTTONS; n++)
     {
-       conf.buttonChannel[n] = sysExBytes[10 + n];
+       conf.buttonChannel[n] = sysExBytes[SWITCH_CHANNEL_BASE + n];
+       conf.button_c_number[n] = sysExBytes[SWITCH_CONTROL_ID_BASE + n];
+       conf.btnmode[n] = sysExBytes[SWITCH_TOGGLE_BASE + n];
     }
  
 
-    conf.chnl = sysExBytes[8];
-    for (int n = 0; n < NUM_SLIDERS; n++)
-    {
-      conf.slider_c_number[n] = sysExBytes[12 + n];
-    }
-    //load button channel numbers
-    for (int n = 0; n < NUM_BUTTONS; n++)
-    {
-      conf.button_c_number[n] = sysExBytes[14 + n];
-    }
-    //load button toggle mode
-    for (int n = 0; n < NUM_BUTTONS; n++)
-    {
-      conf.btnmode[n] = sysExBytes[16 + n];
-    }
-
+    
+ 
     save_config();
 
     byte data[] = { 0xF0, 0x7D, 0xF7 }; // ACK msg - should be safe for any device even if listening for 7D
@@ -423,6 +452,9 @@ void doSysEx() {
     }
 
   }
+  else{
+       blink_n_times(8,50,50);  //to show something wrong with the sys ex
+  }
 }
 
 
@@ -430,6 +462,23 @@ void doSysEx() {
 // Support functions
 //===================================================================================
 
+void blink_n_times(int number_of_blinks, int ontime, int offtime){
+
+bool original_state;
+  original_state = digitalRead(ledPinB); //so we can put it back to how it was
+  digitalWrite(ledPinB, false);
+  delay(offtime);
+  for (int n=0; n < number_of_blinks; n++){
+     digitalWrite(ledPinB, true);
+     delay(ontime);
+     digitalWrite(ledPinB, false);
+     delay(offtime);  
+  }
+
+  delay(2*offtime);
+  digitalWrite(ledPinB,original_state);
+  
+}
 //===================================================================================================
 // calculate crc
 //===================================================================================================

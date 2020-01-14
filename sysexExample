@@ -1,4 +1,4 @@
- 
+#these are test sysex messages, the latest version always at the end of the document. 
 
 #2020-01-07 
 #jont@ninelocks.com
@@ -11,7 +11,8 @@ ours with different sysex order
 amidi  -p hw:1,0,0 -S 'F0 7D 4A 6F 6D 54 01 01  00 0b 51 40 41 0 0 F7' 
 
 #now we have midi channels sent as well so
-
-
 amidi  -p hw:1,0,0 -S 'F0 7D 4A 6F 6D 54 01 01  01 02 03 04 0b 51 40 41 0 0 F7' 
 
+
+2020/01/14 with 5 buttons
+amidi  -p hw:1,0,0 -S 'F0 7D 4A 6F 6D 54 00 00 01 02 03 04 05 06 0b 51 40 41 42 43 44 45 0 0 0 0 0 F7' 
