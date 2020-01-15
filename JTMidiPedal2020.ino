@@ -63,7 +63,7 @@ added flashes to indicate good/bad sysex see sysex receive function
 */
 /**************************************************************************/
 
-#define NUM_BUTTONS 5     // Buttons are simple digital inputs
+#define NUM_BUTTONS 5   // Buttons are simple digital inputs
 #define NUM_SLIDERS 2     // slider are analog inputs, pots, sliders, 
 // expression pedals
 
@@ -79,6 +79,19 @@ const int RAR_ACTIVITY_THRESHOLD = 25;  // ResponsiveAnalogRead threshold
                                         // you may have to alter this value
                                         // to suit your hardware
 
+
+/**************************************************************************/
+/*
+   Sysex Information see doSysEx for how used
+*/
+/**************************************************************************/
+
+
+const int SLIDER_CHANNEL_BASE = 8;                  //these are used show where different parts of the sysex are within                                               
+const int SWITCH_CHANNEL_BASE = 10;                 //the received sysex array
+const int SLIDER_CONTROL_ID_BASE = 15;
+const int SWITCH_CONTROL_ID_BASE = 17;
+const int SWITCH_TOGGLE_BASE = 22;
 
 
 /**************************************************************************/
@@ -196,6 +209,10 @@ void loop() {
   jtGetAnalogData();
   getDigitalData(); // get/process digital pins
   delay(main_delay);
+
+  //if(digitalRead(4) == LOW){
+  //  sendsysex();
+  //}
 }
 
 
@@ -385,17 +402,46 @@ void getDigitalData() {
    // these specifiy where each parameters collection starts in the array
 */
 
+
+void doSysExConfig(){
+  
+ // byte testex[] = {0xf0, 0x7d, 0x4a, 0x6f, 0x6d, 0x54,0x42,0x42, 0xf7};
+byte sysexMsg[28];
+
+sysexMsg[0] = 0xf0;
+sysexMsg[1] = 0x7d;
+sysexMsg[2] = 0x4a;
+sysexMsg[3] = 0x6f;
+sysexMsg[4] = 0x6d;
+sysexMsg[5] = 0x54;
+sysexMsg[6] = 0x42;
+sysexMsg[7] = 0x42;
+
+   for (int n = 0; n < NUM_SLIDERS; n++)
+    {
+        sysexMsg[SLIDER_CHANNEL_BASE + n] =  conf.sliderChannel[n];
+        sysexMsg[SLIDER_CONTROL_ID_BASE + n]= conf.slider_c_number[n];
+    }
+
+    for (int n = 0; n < NUM_BUTTONS; n++)
+    {
+       sysexMsg[SWITCH_CHANNEL_BASE + n] =  conf.buttonChannel[n];
+       sysexMsg[SWITCH_CONTROL_ID_BASE + n] = conf.button_c_number[n];
+       sysexMsg[SWITCH_TOGGLE_BASE + n] =  conf.btnmode[n];
+    }
  
+
+sysexMsg[27] = 0xf7;
+  
+  usbMIDI.sendSysEx(28, sysexMsg, true); 
+
+}
 
 
 //************SYSEX SECTION**************
 void doSysEx() {
 
-const int SLIDER_CHANNEL_BASE = 8;                  //these are used show where different parts of the sysex are within                                               
-const int SWITCH_CHANNEL_BASE = 10;                 //the received sysex array
-const int SLIDER_CONTROL_ID_BASE = 15;
-const int SWITCH_CONTROL_ID_BASE = 17;
-const int SWITCH_TOGGLE_BASE = 22;
+
 
   // its got more convoluted than the setup by oddson
   // from https://forum.pjrc.com/threads/24537-Footsy-Teensy-2-based-MIDI-foot-pedal-controller
@@ -406,6 +452,30 @@ const int SWITCH_TOGGLE_BASE = 22;
   
   
   byte *sysExBytes = usbMIDI.getSysExArray();
+
+if (sysExBytes[0] == 0xf0
+      && sysExBytes[9] == 0xf7 // ************ count how long our message should be and put it in here
+      && sysExBytes[1]  == 0x7D // 7D is private use (non-commercial)
+      && sysExBytes[2]  == 0x4A // 4-byte 'key' - JonT in hex
+      && sysExBytes[3]  == 0x6F
+      && sysExBytes[4]  == 0x6d
+      && sysExBytes[5]  == 0x54) { // read and compare static bytes to ensure valid msg
+   
+    digitalWrite(ledPin, !digitalRead(ledPin));     // invert the led on the board output so led changes on to off
+                                                    // or off to on, each time we recive a sysex aimed
+                                                    // at us with the correct header  
+                                                
+    //blink_n_times(10,50,50);  // blink our external LED to show sys looked ok -ish
+     doSysExConfig();
+
+     
+
+    return;
+    }
+
+
+
+  
   if (sysExBytes[0] == 0xf0
       && sysExBytes[27] == 0xf7 // ************ count how long our message should be and put it in here
       && sysExBytes[1]  == 0x7D // 7D is private use (non-commercial)
@@ -444,7 +514,7 @@ const int SWITCH_TOGGLE_BASE = 22;
  
     save_config();
 
-    byte data[] = { 0xF0, 0x7D, 0xF7 }; // ACK msg - should be safe for any device even if listening for 7D
+    byte data[] = { 0xF0, 0x7D, 0xF7 , true}; // ACK msg - should be safe for any device even if listening for 7D
     usbMIDI.sendSysEx(3, data);         // SEND
     
     for (int i = 0; i < NUM_BUTTONS; i++) {
