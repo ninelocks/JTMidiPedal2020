@@ -3,24 +3,35 @@
 #include <ResponsiveAnalogRead.h>
 #include <EEPROM.h>
 
+//======================================================================================
 /*
  Revision History
+2020/01/15
+* moved to using callbacks to handle events rather than checking the message type
+* New sysex upload request added so the windows pedal manager application can
+* upload the current settings,
+
+
+ 
 2020/01/14 
 
-added led to connect externally to alert/show activity
-added extra switch channels, so now 5 on/off inputs and 2 analogue(exp pedals)
-modified sysex handler to be more compact and hopefully less prone to errors
-added routine to flash the external led so can communicate errors etc etc
-added flashes to indicate good/bad sysex see sysex receive function 
+* added led to connect externally to alert/show activity
+* added extra switch channels, so now 5 on/off inputs and 2 analogue(exp pedals)
+* modified sysex handler to be more compact and hopefully less prone to errors
+* added routine to flash the external led so can communicate errors etc etc
+* added flashes to indicate good/bad sysex see sysex receive function 
 
-2020/01/11 Changed sysex so that each control can have midi channel set independently
+2020/01/11 
+* Changed sysex so that each control can have midi channel set independently
+* 
+*/
 
- */
- 
+
+//======================================================================================
  /*
   * 
-     Midi footswitch and volume/wah pedal controller
-     J.Trinder jont<at>ninelocks.com January 2020
+    oh no yet another  Midi footswitch and volume/wah pedal controller
+    J.Trinder jont<at>ninelocks.com January 2020
 
     I want to make my life easy to expand to more inputs on other devices so am making
     this a bit future proof to allow for up to 16 buttons and 16 sliders
@@ -29,31 +40,32 @@ added flashes to indicate good/bad sysex see sysex receive function
 
     Obviously you do need to configure suitable analog and digital pins.
     
-    Also check out oddos project at:-
+    Also check out oddons project at:-
     
     from https://forum.pjrc.com/threads/24537-Footsy-Teensy-2-based-MIDI-foot-pedal-controller
 
 
-   Many people get problems with noise and jitter on pots see 
+    Many people get problems with noise and jitter on pots see 
    
-   other with similar problems of noise and edge of range
-   https://hackaday.io/project/8027-twister-a-play-on-midi-controllers/log/38042-arduino-analogread-averaging-and-alliteration
+    other with similar problems of noise and edge of range
+    https://hackaday.io/project/8027-twister-a-play-on-midi-controllers/log/38042-arduino-analogread-averaging-and-alliteration
 
     ResponsiveAnalogRead is used to attempt to tame nooise from pots and sliders
 
 
-  In the code there are some  print statments to flag error conditions
-  There are some commented out print statements that you may find useful to uncomment when
-  debugging your hardware.
+    In the code there are some  print statments to flag error conditions
+    There are some commented out print statements that you may find useful to uncomment when
+    debugging your hardware.
 
-  You will want make change to the sysex section to personalise things.
+    You will want make change to the sysex section to personalise things.
 
-  See sysex function for more explanation.
+    See sysex function for more explanation.
 
-  * * * expression pedal wiring * * *
-  Varies a lot see
- 
-  
+    Also there is a windows control application to configure this project
+    see 
+
+
+  Factory reset by holding down pedal which is connected to digital input 0
 */
 
 
@@ -67,6 +79,8 @@ added flashes to indicate good/bad sysex see sysex receive function
 #define NUM_SLIDERS 2     // slider are analog inputs, pots, sliders, 
 // expression pedals
 
+const byte sysversionMajor = 1; //sent back to config manager application
+const byte sysversionMinor = 0; //rmember to changeif you want to identify anything
 
 const int main_delay = 5; // Delay between polling the switches and sliders
 const int ledPin    = 13; // On board led that can be flashed to help debugging etc
@@ -194,6 +208,9 @@ void setup() {
   Serial.print("Started");            // tell the world we have hot this far
   digitalWrite(ledPinB, false);
   blink_n_times(2,200,100);
+
+  usbMIDI.setHandleSystemReset(mySystemReset);  //callback for when a sys reset arrives
+  usbMIDI.setHandleSystemExclusive(mySysEx);
 }
 
 //===================================================================================================
@@ -201,18 +218,19 @@ void setup() {
 //===================================================================================================
 
 void loop() {
-  // if (usbMIDI.read() && usbMIDI.getType() == 7) { //if MIDI is sysEx
+  
+  usbMIDI.read();
+
+  /* or could use this mechanism
   if (usbMIDI.read() && usbMIDI.getType() == usbMIDI.SystemExclusive ) {
     doSysEx(); // look for CC change msg
   }
+ */
 
   jtGetAnalogData();
   getDigitalData(); // get/process digital pins
   delay(main_delay);
-
-  //if(digitalRead(4) == LOW){
-  //  sendsysex();
-  //}
+ 
 }
 
 
@@ -285,6 +303,21 @@ void save_config() {
   EEPROM.put(0, crc);                             //save the crc in the eeprom
 }
 
+//***************************************************************************************************
+// CAllback handlers for the midi things
+//***************************************************************************************************
+/*
+ * you may wish to do more but all I need it to make sure any toggles are untoggeled!
+ * 
+ */ 
+ void mySystemReset(){
+
+   for (int i = 0; i < NUM_BUTTONS; i++) {
+        rtr.toggled[i] = false;                       
+      }
+  blink_n_times(1,500,100);  // blink our external LED  
+  
+ }
 
 //===================================================================================================
 // jtGetAnalogData
@@ -403,10 +436,10 @@ void getDigitalData() {
 */
 
 
-void doSysExConfig(){
+void doSysExSendConfigToManager(){
   
  // byte testex[] = {0xf0, 0x7d, 0x4a, 0x6f, 0x6d, 0x54,0x42,0x42, 0xf7};
-byte sysexMsg[28];
+byte sysexMsg[30];
 
 sysexMsg[0] = 0xf0;
 sysexMsg[1] = 0x7d;
@@ -430,101 +463,96 @@ sysexMsg[7] = 0x42;
        sysexMsg[SWITCH_TOGGLE_BASE + n] =  conf.btnmode[n];
     }
  
-
-sysexMsg[27] = 0xf7;
+sysexMsg[27] = sysversionMajor; //report our program version
+sysexMsg[28] = sysversionMinor;
+sysexMsg[29] = 0xf7;
   
-  usbMIDI.sendSysEx(28, sysexMsg, true); 
+  usbMIDI.sendSysEx(30, sysexMsg, true); 
 
 }
 
-
 //************SYSEX SECTION**************
-void doSysEx() {
 
-
+void mySysEx(byte *sysExBytes, unsigned int howlong){
 
   // its got more convoluted than the setup by oddson
   // from https://forum.pjrc.com/threads/24537-Footsy-Teensy-2-based-MIDI-foot-pedal-controller
   // but I had grand plans for fancy different configs...
   // eg having one of the sysexbytes specify how many sliders/buttons there are in use
  
-  // Serial.println("sysex rx");
+ 
   
-  
-  byte *sysExBytes = usbMIDI.getSysExArray();
-
+                       /* first of all check header of message */
+                       
 if (sysExBytes[0] == 0xf0
-      && sysExBytes[9] == 0xf7 // ************ count how long our message should be and put it in here
-      && sysExBytes[1]  == 0x7D // 7D is private use (non-commercial)
-      && sysExBytes[2]  == 0x4A // 4-byte 'key' - JonT in hex
-      && sysExBytes[3]  == 0x6F
-      && sysExBytes[4]  == 0x6d
-      && sysExBytes[5]  == 0x54) { // read and compare static bytes to ensure valid msg
-   
-    digitalWrite(ledPin, !digitalRead(ledPin));     // invert the led on the board output so led changes on to off
-                                                    // or off to on, each time we recive a sysex aimed
+        && sysExBytes[1]  == 0x7D // 7D is private use (non-commercial)
+        && sysExBytes[2]  == 0x4A // 4-byte 'key' - JonT in hex 0x4A is ascii J, 0x6f o, etc
+        && sysExBytes[3]  == 0x6F
+        && sysExBytes[4]  == 0x6d
+        && sysExBytes[5]  == 0x54) {                // read and compare bytes to ensure valid msg for US
+ 
+        digitalWrite(ledPin, !digitalRead(ledPin)); // just for debugging 
+                                                    // invert the led on the board output so led changes on to off
+                                                    // or off to on, each time we receive a sysex aimed
                                                     // at us with the correct header  
-                                                
-    //blink_n_times(10,50,50);  // blink our external LED to show sys looked ok -ish
-     doSysExConfig();
+        blink_n_times(1,50,50);                     // blink our external LED to show sysex arrived
 
-     
 
-    return;
+        /* if we get here then the header is correct and the message was intended for us      */
+        
+        /* check if message was config request from the manager application                   */
+        /* request config message is 10 bytes long so end of sysex flag should be at index 9  */
+        
+        if ( sysExBytes[9] == 0xf7 && howlong == 10){              
+           Serial.println("CF RQ");     //uncomment when debugging
+           doSysExSendConfigToManager();
+           blink_n_times(2,100,100);      
+           return;
+        }
+        
+        /* check if message was config command from the manager application                   */
+        /* config message is 28 bytes long so end of sysex end flag should be at index 27     */
+        
+                                                                                                     
+        if ( sysExBytes[27] == 0xf7 && howlong == 28 ){
+          
+               // Serial.println("here");     //uncomment when debugging                                   
+               blink_n_times(4,50,50);  // blink our external LED to show sys looked ok -ish
+
+          
+              for (int n = 0; n < NUM_SLIDERS; n++)
+              {
+                  conf.sliderChannel[n] = sysExBytes[SLIDER_CHANNEL_BASE + n];
+                  conf.slider_c_number[n] = sysExBytes[SLIDER_CONTROL_ID_BASE + n];
+              }
+          
+              for (int n = 0; n < NUM_BUTTONS; n++)
+              {
+                 conf.buttonChannel[n] = sysExBytes[SWITCH_CHANNEL_BASE + n];
+                 conf.button_c_number[n] = sysExBytes[SWITCH_CONTROL_ID_BASE + n];
+                 conf.btnmode[n] = sysExBytes[SWITCH_TOGGLE_BASE + n];
+              }
+           
+              save_config();                                  // write config to eeprom
+          
+              byte data[] = { 0xF0, 0x7D, 0xF7 , true};       // ACK msg - should be safe for any device even if listening for 7D
+              usbMIDI.sendSysEx(3, data);                     // SEND
+              
+              for (int i = 0; i < NUM_BUTTONS; i++) {
+                rtr.toggled[i] = false;                       // start in OFF position (oddons code)
+              }
+           
+        }
     }
-
-
-
   
-  if (sysExBytes[0] == 0xf0
-      && sysExBytes[27] == 0xf7 // ************ count how long our message should be and put it in here
-      && sysExBytes[1]  == 0x7D // 7D is private use (non-commercial)
-      && sysExBytes[2]  == 0x4A // 4-byte 'key' - JonT in hex
-      && sysExBytes[3]  == 0x6F
-      && sysExBytes[4]  == 0x6d
-      && sysExBytes[5]  == 0x54) { // read and compare static bytes to ensure valid msg
-   
-    digitalWrite(ledPin, !digitalRead(ledPin));     // invert the led on the board output so led changes on to off
-                                                    // or off to on, each time we recive a sysex aimed
-                                                    // at us with the correct header  
-                                                
-    blink_n_times(1,50,50);  // blink our external LED to show sys looked ok -ish
-    /*
-       jt will add a program version id field in case we want to change it in future and do fancy stuff
-       as we check position of systex end , the F7, we know we have correct number of bytes
-       if moving to a setup where variable number could be downloaded then check counts to make sure we dont try and access beyone array
-    */
+    // if we land here it was either not for us or a bad message
 
+    // you may wish to check for other combinations
 
-    for (int n = 0; n < NUM_SLIDERS; n++)
-    {
-        conf.sliderChannel[n] = sysExBytes[SLIDER_CHANNEL_BASE + n];
-        conf.slider_c_number[n] = sysExBytes[SLIDER_CONTROL_ID_BASE + n];
-    }
+    //Serial.println("Bad sysex message");     //uncomment when debugging
+    blink_n_times(2,500,250);   
+    return;
 
-    for (int n = 0; n < NUM_BUTTONS; n++)
-    {
-       conf.buttonChannel[n] = sysExBytes[SWITCH_CHANNEL_BASE + n];
-       conf.button_c_number[n] = sysExBytes[SWITCH_CONTROL_ID_BASE + n];
-       conf.btnmode[n] = sysExBytes[SWITCH_TOGGLE_BASE + n];
-    }
- 
-
-    
- 
-    save_config();
-
-    byte data[] = { 0xF0, 0x7D, 0xF7 , true}; // ACK msg - should be safe for any device even if listening for 7D
-    usbMIDI.sendSysEx(3, data);         // SEND
-    
-    for (int i = 0; i < NUM_BUTTONS; i++) {
-      rtr.toggled[i] = false;           // start in OFF position (oddons code)
-    }
-
-  }
-  else{
-       blink_n_times(8,50,50);  //to show something wrong with the sys ex
-  }
 }
 
 
