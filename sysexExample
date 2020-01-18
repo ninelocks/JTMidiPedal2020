@@ -1,30 +1,36 @@
-#these are test sysex messages, the latest version always at the end of the document. 
-
-#2020-01-07 
+#2020/01/18
 #jont@ninelocks.com
-Example sysex send using linux command amidi
+#Example sysex send using linux command amidi
+
+The port number will change, to find current port numberamidi -l
 
 
-the port number will change, to find current port numberamidi -l
-ours with different sysex order
 
-amidi  -p hw:1,0,0 -S 'F0 7D 4A 6F 6D 54 01 01  00 0b 51 40 41 0 0 F7' 
+#configure the pedal
+#device id 1, command 1
+amidi  -p hw:1,0,0 -S 'F0 7D 4A 6F 6D 54 01 01  01 02 03 04 05 06 07 0b 51 40 41 42 43 44 0 0 0 0 0 F7' -d
+reply
+f0 7d f7
+#request device send its config
+#device id is 1 and the command is 2
 
-#now we have midi channels sent as well so
-amidi  -p hw:1,0,0 -S 'F0 7D 4A 6F 6D 54 01 01  01 02 03 04 0b 51 40 41 0 0 F7' 
+amidi  -p hw:1,0,0 -S 'F0 7D 4A 6F 6D 54 01 02 F7 -d
+expect
+F0 7D 4A 6F 6D 54 01 02 01 02 03 04 05 06 07 0B 51 40 41 42 43 44 00 00 00 00 00 01 01 F7
 
 
-2020/01/14 with 5 buttons
-amidi  -p hw:1,0,0 -S 'F0 7D 4A 6F 6D 54 00 00 01 02 03 04 05 06 0b 51 40 41 42 43 44 45 0 0 0 0 0 F7' 
+
+Now change all the config values by 1 and try again
+#send config
+amidi  -p hw:1,0,0 -S 'F0 7D 4A 6F 6D 54 01 01  02 03 04 05 06 07 08 0c 52 30 31 32 33 34 1 1 1 1 1 F7' -d
+reply
+f0 7d f7
+#request device send its config
+amidi  -p hw:1,0,0 -S 'F0 7D 4A 6F 6D 54 01 02 F7 -d
+expect
+F0 7D 4A 6F 6D 54 01 02 01 02 03 04 05 06 07 0B 51 40 41 42 43 44 00 00 00 00 00 01 01 F7
 
 
-#now a config request 
-amidi  -p hw:1,0,0 -S 'F0 7D 4A 6F 6D 54 00 00 01 F7
 
-F07D4A6F6D54000001F7
 
-F07D4A6F6D54000001F7
 
-amidi -p hw:1,2 -S F0411042110C000000000074F7 -r dump.syx -t 1
-
-amidi  -S F07D4A6F6D54000001F7 -r jt.syx -t 1
