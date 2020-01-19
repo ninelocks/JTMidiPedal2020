@@ -6,6 +6,8 @@
 //======================================================================================
 /*
  Revision History
+2020/01/19 firmware version 1.3
+the sysex key nore stored in an array midi_key to make it easier to change
 
 2020/01/18
 
@@ -82,6 +84,9 @@ so.
    Defines and constants
 */
 /**************************************************************************/
+const byte midi_key[4] = {'J', 'o', 'n', 'T'};  //key used to identify ourselves in sysex
+                                                //most likely value someone else would change
+                                                //for their own pedal    
 
 #define NUM_BUTTONS 5   // Buttons are simple digital inputs
 #define NUM_SLIDERS 2   // slider are analog inputs, pots, sliders, exp pedals
@@ -89,7 +94,7 @@ so.
 // expression pedals
           /* version of firmware */
 const byte sysversionMajor = 1; //sent back to config manager application
-const byte sysversionMinor = 2; //rmember to changeif you want to identify anything
+const byte sysversionMinor = 3; //rmember to changeif you want to identify anything
 
           /* id for this device, in case I build others using similar sysex */
 const byte sysDevId = 1;        //ID of this device in case we haz multiple of them
@@ -466,10 +471,10 @@ byte sysexMsg[30];
 
 sysexMsg[0] = 0xf0;
 sysexMsg[1] = 0x7d;
-sysexMsg[2] = 0x4a;
-sysexMsg[3] = 0x6f;
-sysexMsg[4] = 0x6d;
-sysexMsg[5] = 0x54;
+sysexMsg[2] = midi_key[0];
+sysexMsg[3] = midi_key[1];
+sysexMsg[4] = midi_key[2];
+sysexMsg[5] = midi_key[3];
 sysexMsg[6] = 0x01; //these just packing as not used at moment
 sysexMsg[7] = 0x02; //these just packing as not used at moment
 
@@ -481,7 +486,7 @@ sysexMsg[7] = 0x02; //these just packing as not used at moment
 
     for (int n = 0; n < NUM_BUTTONS; n++)
     {
-       sysexMsg[ SYSEX_SWITCH_CHANNEL_BASE + n] =  conf.buttonChannel[n];
+       sysexMsg[SYSEX_SWITCH_CHANNEL_BASE + n] =  conf.buttonChannel[n];
        sysexMsg[SYSEX_SWITCH_CONTROL_ID_BASE + n] = conf.button_c_number[n];
        sysexMsg[SYSEX_SWITCH_TOGGLE_BASE + n] =  conf.btnmode[n];
     }
@@ -516,10 +521,10 @@ if (howlong < 8) {     //if theres less bytes than SysEx Start + 7D + 4 (our key
 
 if (sysExBytes[0] == 0xf0
         && sysExBytes[1]  == 0x7D // 7D is private use (non-commercial)
-        && sysExBytes[2]  == 0x4A // 4-byte 'key' - JonT in hex 0x4A is ascii J, 0x6f o, etc
-        && sysExBytes[3]  == 0x6F
-        && sysExBytes[4]  == 0x6d
-        && sysExBytes[5]  == 0x54
+        && sysExBytes[2]  == midi_key[0] // 4-byte 'key' - JonT in hex 0x4A is ascii J, 0x6f o, etc
+        && sysExBytes[3]  == midi_key[1]
+        && sysExBytes[4]  == midi_key[2]
+        && sysExBytes[5]  == midi_key[3]
         && sysExBytes[SYSEX_DEVICE_ID] == sysDevId ) { 
           return true;         
         }
