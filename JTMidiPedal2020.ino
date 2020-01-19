@@ -6,6 +6,9 @@
 //======================================================================================
 /*
  Revision History
+2020/01/19 firmware version 1.4
+Corrected the id key typo which had been JomT in hex rathern the JonT
+ 
 2020/01/19 firmware version 1.3
 the sysex key nore stored in an array midi_key to make it easier to change
 
@@ -84,7 +87,7 @@ so.
    Defines and constants
 */
 /**************************************************************************/
-const byte midi_key[4] = {'J', 'o', 'n', 'T'};  //key used to identify ourselves in sysex
+byte midi_key[4] = {'J', 'o', 'n', 'T'};  //key used to identify ourselves in sysex
                                                 //most likely value someone else would change
                                                 //for their own pedal    
 
@@ -94,7 +97,7 @@ const byte midi_key[4] = {'J', 'o', 'n', 'T'};  //key used to identify ourselves
 // expression pedals
           /* version of firmware */
 const byte sysversionMajor = 1; //sent back to config manager application
-const byte sysversionMinor = 3; //rmember to changeif you want to identify anything
+const byte sysversionMinor = 4; //rmember to changeif you want to identify anything
 
           /* id for this device, in case I build others using similar sysex */
 const byte sysDevId = 1;        //ID of this device in case we haz multiple of them
@@ -199,6 +202,7 @@ void setup() {
 
   delay(500);
 
+  
   pinMode(ledPin, OUTPUT);
   pinMode(ledPinB, OUTPUT);
   pinMode(0, INPUT_PULLUP); // set up three digital pins
@@ -231,6 +235,10 @@ void setup() {
 
   usbMIDI.setHandleSystemReset(mySystemReset);  //callback for when a sys reset arrives
   usbMIDI.setHandleSystemExclusive(mySysEx);
+  Serial.println(midi_key[0],HEX);
+  Serial.println(midi_key[1],HEX);
+  Serial.println(midi_key[2],HEX);
+  Serial.println(midi_key[3],HEX);
 }
 
 
@@ -526,8 +534,10 @@ if (sysExBytes[0] == 0xf0
         && sysExBytes[4]  == midi_key[2]
         && sysExBytes[5]  == midi_key[3]
         && sysExBytes[SYSEX_DEVICE_ID] == sysDevId ) { 
+         
           return true;         
         }
+ 
         return false;
 }
 
@@ -577,10 +587,11 @@ void mySysEx(byte *sysExBytes, unsigned int howlong){
     /* first check if the sysex was really aimed at us */
     
     if (! isSysExForUs(sysExBytes,howlong)){
-      blink_n_times(2,100,50);                                            
+      blink_n_times(2,100,50);     
+                                            
       return; //maybe flash an led or somethein
     }
-
+ 
 
     /* if we get here then the header is correct and the message was intended for us      */
     /* given the system identified this as a sysex message we dont really need to check the kast byte is f7 do we? */
