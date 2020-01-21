@@ -1,36 +1,61 @@
-#2020/01/18
+#2020/01/21
+
 #jont@ninelocks.com
-#Example sysex send using linux command amidi
+#Example sysex messages and tests
 
-The port number will change, to find current port numberamidi -l
-
+To test responses these are comands that can be used with amidi on linux
+The port number will change, to find current port number amidi -l
 
 
 #configure the pedal
 #device id 1, command 1
 amidi  -p hw:1,0,0 -S 'F0 7D 4A 6F 6E 54 01 01  01 02 03 04 05 06 07 0b 51 40 41 42 43 44 0 0 0 0 0 F7' -d
-reply
-f0 7d f7
+reply if all gos ok
+F0 7D 4A 6F 6E 54 01 00 F7 
+
+
 #request device send its config
 #device id is 1 and the command is 2
 
-amidi  -p hw:1,0,0 -S 'F0 7D 4A 6F 6D 54 01 02 F7 -d
+amidi  -p hw:1,0,0 -S 'F0 7D 4A 6F 6E 54 01 02 F7' -d
 expect
 F0 7D 4A 6F 6E 54 01 02 01 02 03 04 05 06 07 0B 51 40 41 42 43 44 00 00 00 00 00 01 01 F7
 
-
+===
 
 Now change all the config values by 1 and try again
+
 #send config
 amidi  -p hw:1,0,0 -S 'F0 7D 4A 6F 6E 54 01 01  02 03 04 05 06 07 08 0c 52 30 31 32 33 34 1 1 1 1 1 F7' -d
 reply
-f0 7d f7
+F0 7D 4A 6F 6E 54 01 00 F7
+
 #request device send its config
 amidi  -p hw:1,0,0 -S 'F0 7D 4A 6F 6E 54 01 02 F7 -d
 expect
 F0 7D 4A 6F 6E 54 01 02 01 02 03 04 05 06 07 0B 51 40 41 42 43 44 00 00 00 00 00 01 01 F7
 
 
+========================================
+== tests
+========================================
+config command but too short
+amidi  -p hw:1,0,0 -S 'F0 7D 4A 6F 6E 54 01 01  02 03 04 05 06 07 08 0c 52 30 31 32 33 34 1 1 1 1 F7' -d
+or
+amidi  -p hw:1,0,0 -S 'F0 7D 4A 6F 6E 54 01 01  F7' -d
+expect
+F0 7D 4A 6F 6E 54 01 01 F7
 
+
+config command but too long
+amidi  -p hw:1,0,0 -S 'F0 7D 4A 6F 6E 54 01 01  02 03 04 05 06 07 08 0c 52 30 31 32 33 34 1 1 1 1 1 2 F7' -d
+expect
+F0 7D 4A 6F 6E 54 01 01 F7
+
+
+#request device send its config too long 
+amidi  -p hw:1,0,0 -S 'F0 7D 4A 6F 6E 54 01 02 33 F7' -d
+expect
+F0 7D 4A 6F 6E 54 01 01 F7
 
 

@@ -2,10 +2,33 @@
 #include <Bounce.h>
 #include <ResponsiveAnalogRead.h>
 #include <EEPROM.h>
-
-//======================================================================================
 /*
- Revision History
+    oh no yet another  Midi footswitch and volume/wah pedal controller
+    J.Trinder jont<at>ninelocks.com January 2020
+
+    more details below......after the revision history
+*/
+//======================================================================================
+//  Revision History
+//======================================================================================
+
+/*
+2020/01/21 firmware version 1.6
+
+Sysex code moved to separate file.
+Comments and explanation revised
+
+2020/01/20
+modify the acknowledgement sent after configuration command so the ack
+is identified with our key AND if things fail it flags that in the reply.
+
+Also for other incorrect messages ie ones that are too long or have wrong fields 
+an NAK is sent.
+
+for messages below  dont contain at least our key, id and a command byte 
+no reply is sent at all
+
+
 2020/01/19 firmware version 1.4
 Corrected the id key typo which had been JomT in hex rathern the JonT
  
@@ -46,6 +69,20 @@ so.
     oh no yet another  Midi footswitch and volume/wah pedal controller
     J.Trinder jont<at>ninelocks.com January 2020
 
+    I appreciate that this is rather complicated compared to most midi pedals.
+    Ive put in lots of extra code especially around sysex handling and acknowledgement or messages
+    and sending back a message indicating success or failure.
+
+    Some of this is superflous for a usb connected device but I also intend to build one with
+    conventional serial MIDI interface.
+
+    These may be extended in future to give more information.
+
+    The system also does a crc of the eeprom stored configuration as, I am concious of the pain of failing 
+    eeprom :-).
+
+    
+
     I want to make my life easy to expand to more inputs on other devices so am making
     this a bit future proof to allow for up to 16 buttons and 16 sliders
     I am using an teensy lc which has 128 locations so plenty of room to leave space
@@ -81,7 +118,6 @@ so.
   Factory reset by holding down pedal which is connected to digital input 0
 */
 
-
 /**************************************************************************/
 /*
    Defines and constants
@@ -91,21 +127,30 @@ byte midi_key[4] = {'J', 'o', 'n', 'T'};  //key used to identify ourselves in sy
                                                 //most likely value someone else would change
                                                 //for their own pedal    
 
+// I would normally use an enum but for today these const are for sysex ACK/NAK Responses
+// ACK = Acknowledge, NAK = negative acknowledge ie fail
+
+const byte SYSEX_OK   =  0;
+const byte SYSEX_FAIL =  1;
+
+
 #define NUM_BUTTONS 5   // Buttons are simple digital inputs
 #define NUM_SLIDERS 2   // slider are analog inputs, pots, sliders, exp pedals
 
 // expression pedals
           /* version of firmware */
 const byte sysversionMajor = 1; //sent back to config manager application
-const byte sysversionMinor = 4; //rmember to changeif you want to identify anything
+const byte sysversionMinor = 6; //rmember to changeif you want to identify anything
 
           /* id for this device, in case I build others using similar sysex */
 const byte sysDevId = 1;        //ID of this device in case we haz multiple of them
        
 
+
+
 const int main_delay = 5; // Delay between loops
-const int ledPin    = 13; // On board led that can be flashed to help debugging etc
-const int ledPinB   = 5;  // An external led 
+const int ledPin     = 13; // On board led that can be flashed to help debugging etc
+const int ledPinB    = 5;  // An external led 
 
 
 const int RAR_ACTIVITY_THRESHOLD = 25;  // ResponsiveAnalogRead threshold
@@ -235,10 +280,7 @@ void setup() {
 
   usbMIDI.setHandleSystemReset(mySystemReset);  //callback for when a sys reset arrives
   usbMIDI.setHandleSystemExclusive(mySysEx);
-  Serial.println(midi_key[0],HEX);
-  Serial.println(midi_key[1],HEX);
-  Serial.println(midi_key[2],HEX);
-  Serial.println(midi_key[3],HEX);
+ 
 }
 
 
@@ -418,220 +460,8 @@ void getDigitalData() {
 
 
 
-//===================================================================================================
-// receive sysex
-//===================================================================================================
-
-/*
-   SysEx receive
-   Although Ive allowed for multiple switches etc here I only use two of each so
-   Format of the sysex message
-   byte number, value or use
-   0 0xF0  //sys always starts with 0xFO
-   1 0x7D  // 7D is private indicator as we arent a midi registered manufacturer
-           // next 4 bytes are a key we use to make sure a message is really ours
-           // this is done as oddson project at
-           // https://forum.pjrc.com/threads/24537-Footsy-Teensy-2-based-MIDI-foot-pedal-controller
-           
-   2 0x4A  // J  our id is JonT in hex, each character specified in ascii 0x4a is a J
-   3 0x6F  // o 
-   4 0x6d  // n
-   5 0x54  // T
-   6 0xNN  // our device ID 1 for this midi pedal
-  
-   7 0xXX   // command ID eg 01 =   write config from the received sysex
-                             02 =   request that device sends us its config
-   
-   8       // midi channel slider 1
-   9       // midi channel slider 2
-  
-   10      // midi channel button 1
-   11      // midi channel button 2 
-   12      // midi channel button 3
-   13      // midi channel button 4 
-   14      // midi channel button 5
- 
-   
-   15      // slider 1 controller number
-   16      // slider 2 controller number
-   
-   17      // switch 1 controller number
-   18      // switch 2 controller number
-   19      // switch 3 controller number
-   20      // switch 4 controller number
-   21      // switch 5 controller number
-   
-   22      // switch 1 toggle mode (1 is yes)
-   23      // switch 2 toggle mode (1 is yes)
-   24      // switch 3 toggle mode (1 is yes)
-   25      // switch 4 toggle mode (1 is yes)
-   26      // switch 5 toggle mode (1 is yes)   
-   
-   27 0xF7 //end of sysex marker
-   // these specifiy where each parameters collection starts in the array
-*/
 
 
-void doSysExSendConfigToManager(){
-  
- // byte testex[] = {0xf0, 0x7d, 0x4a, 0x6f, 0x6d, 0x54,0x42,0x42, 0xf7};
-byte sysexMsg[30];
-
-sysexMsg[0] = 0xf0;
-sysexMsg[1] = 0x7d;
-sysexMsg[2] = midi_key[0];
-sysexMsg[3] = midi_key[1];
-sysexMsg[4] = midi_key[2];
-sysexMsg[5] = midi_key[3];
-sysexMsg[6] = 0x01; //these just packing as not used at moment
-sysexMsg[7] = 0x02; //these just packing as not used at moment
-
-   for (int n = 0; n < NUM_SLIDERS; n++)
-    {
-        sysexMsg[SYSEX_SLIDER_CHANNEL_BASE + n] =  conf.sliderChannel[n];
-        sysexMsg[SYSEX_SLIDER_CONTROL_ID_BASE + n]= conf.slider_c_number[n];
-    }
-
-    for (int n = 0; n < NUM_BUTTONS; n++)
-    {
-       sysexMsg[SYSEX_SWITCH_CHANNEL_BASE + n] =  conf.buttonChannel[n];
-       sysexMsg[SYSEX_SWITCH_CONTROL_ID_BASE + n] = conf.button_c_number[n];
-       sysexMsg[SYSEX_SWITCH_TOGGLE_BASE + n] =  conf.btnmode[n];
-    }
- 
-sysexMsg[27] = sysversionMajor; //report our program version
-sysexMsg[28] = sysversionMinor;
-sysexMsg[29] = 0xf7;
-  
-  usbMIDI.sendSysEx(30, sysexMsg, true); 
-
-}
-
-
-//************SYSEX SECTION**************
-/*
- * I take the aprroach that I may want to add to the sysex messages the device handles later
- * so....
- * Ive split the sysex handling up into checking if send matches our key
- * then worry about handling individual messages
- * if going to later handle universal sysex can add that it
- * 
-*/
-
-//===================================================================================================
-// receive sysex
-//===================================================================================================
-bool isSysExForUs(byte *sysExBytes, unsigned int howlong){
-
-if (howlong < 8) {     //if theres less bytes than SysEx Start + 7D + 4 (our key length)   + 1( our device ID) + 1 (command)                
-  return false;       //no point in checking anything else
-}
-
-if (sysExBytes[0] == 0xf0
-        && sysExBytes[1]  == 0x7D // 7D is private use (non-commercial)
-        && sysExBytes[2]  == midi_key[0] // 4-byte 'key' - JonT in hex 0x4A is ascii J, 0x6f o, etc
-        && sysExBytes[3]  == midi_key[1]
-        && sysExBytes[4]  == midi_key[2]
-        && sysExBytes[5]  == midi_key[3]
-        && sysExBytes[SYSEX_DEVICE_ID] == sysDevId ) { 
-         
-          return true;         
-        }
- 
-        return false;
-}
-
-//===================================================================================================
-
-void sysexDoConfig(byte *sysExBytes, unsigned int howlong){
-      
-      /* length and message type was validated before we get here */ 
-       
-      // Serial.println(" in config function ");     //uncomment when debugging 
-                                         
-      blink_n_times(2,50,50);  // blink our external LED to show sys looked ok -ish
- 
-      for (int n = 0; n < NUM_SLIDERS; n++)
-      {
-          conf.sliderChannel[n] = sysExBytes[SYSEX_SLIDER_CHANNEL_BASE + n];
-          conf.slider_c_number[n] = sysExBytes[SYSEX_SLIDER_CONTROL_ID_BASE + n];
-      }
-  
-      for (int n = 0; n < NUM_BUTTONS; n++)
-      {
-         conf.buttonChannel[n] = sysExBytes[ SYSEX_SWITCH_CHANNEL_BASE + n];
-         conf.button_c_number[n] = sysExBytes[SYSEX_SWITCH_CONTROL_ID_BASE + n];
-         conf.btnmode[n] = sysExBytes[SYSEX_SWITCH_TOGGLE_BASE + n];
-      }
-   
-      save_config();                                  // write config to eeprom
-  
-      byte data[] = { 0xF0, 0x7D, 0xF7 , true};       // ACK msg - should be safe for any device even if listening for 7D
-      usbMIDI.sendSysEx(3, data,true);                     // SEND
-      
-      for (int i = 0; i < NUM_BUTTONS; i++) {
-        rtr.toggled[i] = false;                       // start in OFF position (oddons code)
-      }
-   
- 
-}
-
-//===================================================================================================
-//sysex clallback handler
-//===================================================================================================
-void mySysEx(byte *sysExBytes, unsigned int howlong){
-
-    // could check universal sysEx?
-    // but  we dont handle them in this version
-
-    /* first check if the sysex was really aimed at us */
-    
-    if (! isSysExForUs(sysExBytes,howlong)){
-      blink_n_times(2,100,50);     
-                                            
-      return; //maybe flash an led or somethein
-    }
- 
-
-    /* if we get here then the header is correct and the message was intended for us      */
-    /* given the system identified this as a sysex message we dont really need to check the kast byte is f7 do we? */
-   
-    /* check if message was config command from the manager application                   */
-    /* config message is 28 bytes long so end of sysex end flag should be at index 27     */ 
-    
-    if ( sysExBytes[27] == 0xf7 && howlong == 28 && sysExBytes[SYSEX_DEV_COMMAND] == 1){
-                   blink_n_times(1,50,50);    
-                   sysexDoConfig(sysExBytes,  howlong);
-                   return;
-    }
-
-   /* check if message was request for  config command from the manager application              */
-   /* request message  message is 9 bytes long so end of sysex end flag should be at index 8     */ 
-    
-    if ( sysExBytes[8] == 0xf7 && howlong == 9  && sysExBytes[SYSEX_DEV_COMMAND] == 2)   {         
-               doSysExSendConfigToManager();  
-               blink_n_times(3,100,100);
-               return;   
-    }  
-
-    // if land here then something we havent implemented yet :-) )
-    blink_n_times(2,500,250);  
-
-    /* short command coule be done with a switch but as we only handle 1 short command at the moment
-     *  an if , as above, seems reasonable
- 
- 
-    if  (sysExBytes[8] == 0xf7 && howlong == 9)   {    
-        switch ( sysExBytes[SYSEX_DEV_COMMAND]) {
-                case 2: doSysExSendConfigToManager();  blink_n_times(3,100,100); break;
- 
-                default: break;
-        }
-    }
-    */
-
-}
-  
 //===================================================================================
 // Support functions
 //===================================================================================
