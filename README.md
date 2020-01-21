@@ -19,7 +19,7 @@ At startup the pedal can be reset to default values if the input to to switch 0 
 
 ##### Configuring the Pedal Via System Exclusive Messages
 
-The configuration of the pedal is through system exclusive messages and an companion Windows application (works under wine in Linux is aslo available for download.
+The configuration of the pedal is through system exclusive messages and an companion Windows application (works under wine in Linux is also available for download.
 
-The sysex messages are explained in more detail in the jtsysexformat.txt
+The sysex format is described in  [jtsysexformat.txt](jtsysexformat.txt)
 
