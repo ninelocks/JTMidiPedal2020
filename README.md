@@ -21,5 +21,5 @@ At startup the pedal can be reset to default values if the input to to switch 0 
 
 The configuration of the pedal is through system exclusive messages and an companion Windows application (works under wine in Linux is also available for download.
 
-The sysex format is described in  [jtsysexformat.txt](jtsysexformat.txt)
+The sysex format is described in  [jtsysexformat.txt](doc/jtsysexformat.txt)
 
