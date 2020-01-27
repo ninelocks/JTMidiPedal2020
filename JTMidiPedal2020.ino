@@ -13,6 +13,15 @@
 //======================================================================================
 
 /*
+
+2020/01/27 firmware version 1.7
+
+There was a problem in that midi library uses channels 1 to 16 
+whereas I nortmally work 0-15 in ACTUAL hex numbers of the received data
+
+So in this module we use 1-16 and conversion to real hex numbers is done
+in the sysex module.
+
 2020/01/21 firmware version 1.6
 
 Sysex code moved to separate file.
@@ -140,7 +149,7 @@ const byte SYSEX_FAIL =  1;
 // expression pedals
           /* version of firmware */
 const byte sysversionMajor = 1; //sent back to config manager application
-const byte sysversionMinor = 6; //rmember to changeif you want to identify anything
+const byte sysversionMinor = 7; //rmember to changeif you want to identify anything
 
           /* id for this device, in case I build others using similar sysex */
 const byte sysDevId = 1;        //ID of this device in case we haz multiple of them
@@ -196,8 +205,8 @@ const int SYSEX_SWITCH_TOGGLE_BASE     = 22;
 
 struct config_record {
   byte chnl; //midi channel
-  byte buttonChannel[NUM_BUTTONS] = {0, 0, 0, 0, 0};     //button midi channels
-  byte sliderChannel[NUM_SLIDERS] = {0, 0};   //slider midi channels
+  byte buttonChannel[NUM_BUTTONS] = {0, 0, 0, 0, 0};     //button midi channels as 1-16
+  byte sliderChannel[NUM_SLIDERS] = {0, 0};              //slider midi channels as 1-16
   bool btnmode[NUM_BUTTONS] = {0, 0, 0, 0, 0}; //0 for normal 1 for toggle
  
   /*

@@ -148,16 +148,20 @@ sysexMsg[6] = sysDevId; // our device id
 sysexMsg[7] = 2;        //the command we are responding to 
                         // partly here for future use and more complicated 
                         // protocol
-
+  /* 
+   * note we add 1 from mdi channel when we receive it as main program uses 1-16 not 0-15
+   * note we subtract  1 from mdi channel when we SEND it as main progr uses 1-16 not 0-15
+   */
+   
    for (int n = 0; n < NUM_SLIDERS; n++)
     {
-        sysexMsg[SYSEX_SLIDER_CHANNEL_BASE + n] =  conf.sliderChannel[n];
+        sysexMsg[SYSEX_SLIDER_CHANNEL_BASE + n] =  conf.sliderChannel[n] -1;
         sysexMsg[SYSEX_SLIDER_CONTROL_ID_BASE + n]= conf.slider_c_number[n];
     }
 
     for (int n = 0; n < NUM_BUTTONS; n++)
     {
-       sysexMsg[SYSEX_SWITCH_CHANNEL_BASE + n] =  conf.buttonChannel[n];
+       sysexMsg[SYSEX_SWITCH_CHANNEL_BASE + n] =  conf.buttonChannel[n] -1;
        sysexMsg[SYSEX_SWITCH_CONTROL_ID_BASE + n] = conf.button_c_number[n];
        sysexMsg[SYSEX_SWITCH_TOGGLE_BASE + n] =  conf.btnmode[n];
     }
@@ -209,6 +213,10 @@ if (sysExBytes[0] == 0xf0
 void sysexDoConfig(byte *sysExBytes, unsigned int howlong){
 
       /* length and message type was validated before we get here */ 
+      /* 
+       *  note we add 1 from mdi channel when we receive it as main program uses 1-16 not 0-15
+       * note we subtract  1 from mdi channel when we SEND it as main progr uses 1-16 not 0-15
+      */
        
       // Serial.println(" in config function ");     //uncomment when debugging 
                                          
@@ -216,13 +224,13 @@ void sysexDoConfig(byte *sysExBytes, unsigned int howlong){
  
       for (int n = 0; n < NUM_SLIDERS; n++)
       {
-          conf.sliderChannel[n] = sysExBytes[SYSEX_SLIDER_CHANNEL_BASE + n];
+          conf.sliderChannel[n] = sysExBytes[SYSEX_SLIDER_CHANNEL_BASE + n] + 1;
           conf.slider_c_number[n] = sysExBytes[SYSEX_SLIDER_CONTROL_ID_BASE + n];
       }
   
       for (int n = 0; n < NUM_BUTTONS; n++)
       {
-         conf.buttonChannel[n] = sysExBytes[ SYSEX_SWITCH_CHANNEL_BASE + n];
+         conf.buttonChannel[n] = sysExBytes[ SYSEX_SWITCH_CHANNEL_BASE + n] + 1;
          conf.button_c_number[n] = sysExBytes[SYSEX_SWITCH_CONTROL_ID_BASE + n];
          conf.btnmode[n] = sysExBytes[SYSEX_SWITCH_TOGGLE_BASE + n];
       }
