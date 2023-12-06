@@ -13,6 +13,15 @@
 //======================================================================================
 
 /*
+ * 
+ * 
+ * 
+2023/12/06 1.8
+
+add note mode to buttons
+
+
+
 
 2020/01/27 firmware version 1.7
 
@@ -142,6 +151,11 @@ byte midi_key[4] = {'J', 'o', 'n', 'T'};  //key used to identify ourselves in sy
 const byte SYSEX_OK   =  0;
 const byte SYSEX_FAIL =  1;
 
+//these for what switched input do, send control change or note info
+const byte CONTROL_MOMENTARY = 0;
+const byte CONTROL_TOGGLER   = 1;
+const byte CONTROL_NOTEMODE  = 2;
+
 
 #define NUM_BUTTONS 5   // Buttons are simple digital inputs
 #define NUM_SLIDERS 2   // slider are analog inputs, pots, sliders, exp pedals
@@ -149,7 +163,7 @@ const byte SYSEX_FAIL =  1;
 // expression pedals
           /* version of firmware */
 const byte sysversionMajor = 1; //sent back to config manager application
-const byte sysversionMinor = 7; //rmember to changeif you want to identify anything
+const byte sysversionMinor = 8; //rmember to changeif you want to identify anything
 
           /* id for this device, in case I build others using similar sysex */
 const byte sysDevId = 1;        //ID of this device in case we haz multiple of them
@@ -207,8 +221,8 @@ struct config_record {
   byte chnl; //midi channel
   byte buttonChannel[NUM_BUTTONS] = {0, 0, 0, 0, 0};     //button midi channels as 1-16
   byte sliderChannel[NUM_SLIDERS] = {0, 0};              //slider midi channels as 1-16
-  bool btnmode[NUM_BUTTONS] = {0, 0, 0, 0, 0}; //0 for normal 1 for toggle
- 
+  byte btnmode[NUM_BUTTONS] = {0, 0, 0, 0, 0}; //0 for normal 1 for toggle  2 for note mode
+ //changed decmber 2023 
   /*
        note the controller numbers here are in, *shudder* decimal
        not hex
@@ -444,6 +458,10 @@ void jtGetAnalogData() {
 //this pretty much same as https://forum.pjrc.com/threads/24537-Footsy-Teensy-2-based-MIDI-foot-pedal-controller
 // credit to
 
+//december 2023 we is going to add in sending note on off which will be a laugh
+//so first of all save a copy as it was
+/*
+
 void getDigitalData() {
   for (int i = 0; i < NUM_BUTTONS; i++) {
     button[i].update(); //update bounce object for each button
@@ -462,6 +480,63 @@ void getDigitalData() {
     if (button[i].risingEdge()) { // button release - pullup to HIGH
       if (not(conf.btnmode[i] == 1)) { // if non-latched
         usbMIDI.sendControlChange(conf.button_c_number[i], 0, conf.buttonChannel[i]);  // to to OFF
+      }
+    }
+  }
+}
+*/
+
+void getDigitalData() {
+  for (int i = 0; i < NUM_BUTTONS; i++) {
+    button[i].update(); //update bounce object for each button
+    
+    //button failling edge
+    
+    if (button[i].fallingEdge()) { // button press to ground
+
+      // if in toggle mode
+      if (rtr.toggled[i] && conf.btnmode[i] == CONTROL_TOGGLER) { // if toggled state and toggle behavoiour both true...
+        usbMIDI.sendControlChange(conf.button_c_number[i], 0, conf.buttonChannel[i]);  // unlatch to OFF
+        rtr.toggled[i] = false      ;  // toggled to false for next time
+
+
+        
+      }
+      else { 
+
+
+        //if in note mode...later make this a named constant eg
+        //here the controller number value is used as the note number
+        if (conf.btnmode[i] == CONTROL_NOTEMODE){
+           usbMIDI.sendNoteOn(conf.button_c_number[i], 127, conf.buttonChannel[i]);
+        } else {
+        // either latched and toggled==false or non-latched...
+        usbMIDI.sendControlChange(conf.button_c_number[i], 127, conf.buttonChannel[i]); //...either way to to ON state
+        }
+        //now do the toggling
+        
+        if (conf.btnmode[i] == 1) {
+          rtr.toggled[i] = true      ;  // but only change toggled state if in latched mode
+        }
+        
+      }
+    }
+
+
+  //button rising edge
+    
+    if (button[i].risingEdge()) { // button release - pullup to HIGH
+
+
+      if (conf.btnmode[i] == 2){
+           usbMIDI.sendNoteOff(conf.button_c_number[i], 127, conf.buttonChannel[i]);
+        } 
+      if (not(conf.btnmode[i] == CONTROL_TOGGLER)) { // if non-latched
+        usbMIDI.sendControlChange(conf.button_c_number[i], 0, conf.buttonChannel[i]);  // to to OFF
+      
+      
+      
+      
       }
     }
   }
