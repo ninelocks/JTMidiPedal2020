@@ -163,7 +163,7 @@ const byte CONTROL_NOTEMODE  = 2;
 // expression pedals
           /* version of firmware */
 const byte sysversionMajor = 1; //sent back to config manager application
-const byte sysversionMinor = 8; //rmember to changeif you want to identify anything
+const byte sysversionMinor = 9; //rmember to changeif you want to identify anything
 
           /* id for this device, in case I build others using similar sysex */
 const byte sysDevId = 1;        //ID of this device in case we haz multiple of them
