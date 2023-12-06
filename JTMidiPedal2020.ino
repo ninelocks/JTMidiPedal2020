@@ -16,13 +16,13 @@
  * 
  * 
  * 
+ * 
+2023/12/06 1.9
+fix bug of spurious control send
+
 2023/12/06 1.8
-
 add note mode to buttons
-
-
-
-
+So they have 0 normal, 1 toggle mode, 2 note mode
 2020/01/27 firmware version 1.7
 
 There was a problem in that midi library uses channels 1 to 16 
@@ -528,16 +528,22 @@ void getDigitalData() {
     if (button[i].risingEdge()) { // button release - pullup to HIGH
 
 
-      if (conf.btnmode[i] == 2){
+        if (conf.btnmode[i] == 2){
            usbMIDI.sendNoteOff(conf.button_c_number[i], 127, conf.buttonChannel[i]);
         } 
-      if (not(conf.btnmode[i] == CONTROL_TOGGLER)) { // if non-latched
+
+        //here be a a poential hole!
+        //used to check for not toggle mode now need to also allow for note mode
+        /* old pree having 3 mdes version
+         *  
+        if (not(conf.btnmode[i] == CONTROL_TOGGLER)) { // if non-latched
         usbMIDI.sendControlChange(conf.button_c_number[i], 0, conf.buttonChannel[i]);  // to to OFF
-      
-      
-      
-      
-      }
+        }
+        */
+        if (conf.btnmode[i] == CONTROL_MOMENTARY ) { // if non-latched
+        usbMIDI.sendControlChange(conf.button_c_number[i], 0, conf.buttonChannel[i]);  // to to OFF
+        }
+        
     }
   }
 }
