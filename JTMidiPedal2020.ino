@@ -19,6 +19,8 @@
  * 
  * 
  *
+2024/11/30 v1,12
+changed how we startup and load defaults, and added code so we can fall back to factory defaults
 2024/11/30 changed the default settings  
 
 Switch Inputs
@@ -103,7 +105,7 @@ so.
 
 
 //======================================================================================
- /*
+/*
   * 
     oh no yet another  Midi footswitch and volume/wah pedal controller
     J.Trinder jont<at>ninelocks.com January 2020
@@ -162,39 +164,39 @@ so.
    Defines and constants
 */
 /**************************************************************************/
-byte midi_key[4] = {'J', 'o', 'n', 'T'};  //key used to identify ourselves in sysex
-                                                //most likely value someone else would change
-                                                //for their own pedal    
+byte midi_key[4] = { 'J', 'o', 'n', 'T' };  //key used to identify ourselves in sysex
+                                            //most likely value someone else would change
+                                            //for their own pedal
 
 // I would normally use an enum but for today these const are for sysex ACK/NAK Responses
 // ACK = Acknowledge, NAK = negative acknowledge ie fail
 
-const byte SYSEX_OK   =  0;
-const byte SYSEX_FAIL =  1;
+const byte SYSEX_OK = 0;
+const byte SYSEX_FAIL = 1;
 
 //these for what switched input do, send control change or note info
 const byte CONTROL_MOMENTARY = 0;
-const byte CONTROL_TOGGLER   = 1;
-const byte CONTROL_NOTEMODE  = 2;
+const byte CONTROL_TOGGLER = 1;
+const byte CONTROL_NOTEMODE = 2;
 
 
-#define NUM_BUTTONS 5   // Buttons are simple digital inputs
-#define NUM_SLIDERS 2   // slider are analog inputs, pots, sliders, exp pedals
+#define NUM_BUTTONS 5  // Buttons are simple digital inputs
+#define NUM_SLIDERS 2  // slider are analog inputs, pots, sliders, exp pedals
 
 // expression pedals
-          /* version of firmware */
-const byte sysversionMajor = 1; //sent back to config manager application
-const byte sysversionMinor = 10; //rmember to changeif you want to identify anything
+/* version of firmware */
+const byte sysversionMajor = 1;   //sent back to config manager application
+const byte sysversionMinor = 12;  //rmember to changeif you want to identify anything
 
-          /* id for this device, in case I build others using similar sysex */
-const byte sysDevId = 1;        //ID of this device in case we haz multiple of them
-       
-
+/* id for this device, in case I build others using similar sysex */
+const byte sysDevId = 1;  //ID of this device in case we haz multiple of them
 
 
-const int main_delay = 5; // Delay between loops
-const int ledPin     = 13; // On board led that can be flashed to help debugging etc
-const int ledPinB    = 5;  // An external led 
+
+
+const int main_delay = 5;  // Delay between loops
+const int ledPin = 13;     // On board led that can be flashed to help debugging etc
+const int ledPinB = 5;     // An external led
 
 
 const int RAR_ACTIVITY_THRESHOLD = 25;  // ResponsiveAnalogRead threshold
@@ -212,13 +214,13 @@ const int RAR_ACTIVITY_THRESHOLD = 25;  // ResponsiveAnalogRead threshold
 */
 /**************************************************************************/
 
-const int SYSEX_DEVICE_ID              = 6;
-const int SYSEX_DEV_COMMAND            = 7;
-const int SYSEX_SLIDER_CHANNEL_BASE    = 8;                  //these are used show where different parts of the sysex are within                                               
-const int SYSEX_SWITCH_CHANNEL_BASE    = 10;                 //the received sysex array
+const int SYSEX_DEVICE_ID = 6;
+const int SYSEX_DEV_COMMAND = 7;
+const int SYSEX_SLIDER_CHANNEL_BASE = 8;   //these are used show where different parts of the sysex are within
+const int SYSEX_SWITCH_CHANNEL_BASE = 10;  //the received sysex array
 const int SYSEX_SLIDER_CONTROL_ID_BASE = 15;
 const int SYSEX_SWITCH_CONTROL_ID_BASE = 17;
-const int SYSEX_SWITCH_TOGGLE_BASE     = 22;
+const int SYSEX_SWITCH_TOGGLE_BASE = 22;
 
 /**************************************************************************/
 /*
@@ -238,30 +240,63 @@ const int SYSEX_SWITCH_TOGGLE_BASE     = 22;
    This struct keeps the configuration information together
 */
 
+const byte factory_buttonChannel[NUM_BUTTONS] = { 2, 2, 2, 2, 2 };
+const byte factory_sliderChannel[NUM_BUTTONS] = { 2, 2 };
+const byte factory_btnmode[NUM_BUTTONS] = { 0, 0, 1, 1, 2 };
+const byte factory_slider_c_number[NUM_BUTTONS] = { 7, 11 };
+const byte factory_button_c_number[NUM_BUTTONS] = { 21, 22, 23, 24, 36 };  //the controller number
+
+
+
+//this is a bit nasty as we could jusy define the struct and call fact loadDefaults into and empty struct
+//but doing 
+
+
+
 struct config_record {
-  byte chnl; //midi channel
-  byte buttonChannel[NUM_BUTTONS] = {2, 2, 2, 2, 2};     //button midi channels as 1-16
-  byte sliderChannel[NUM_SLIDERS] = {2, 2};              //slider midi channels as 1-16
-  byte btnmode[NUM_BUTTONS] = {0, 0, 1, 1, 2}; //0 for normal 1 for toggle  2 for note mode
- //changed decmber 2023 
+  byte chnl;                                            //midi channel
+  byte buttonChannel[NUM_BUTTONS];  //button midi channels as 1-16
+  byte sliderChannel[NUM_SLIDERS];          //slider midi channels as 1-16
+  byte btnmode[NUM_BUTTONS];        //0 for normal 1 for toggle  2 for note mode
+                                                        //changed decmber 2023
   /*
        note the controller numbers here are in, *shudder* decimal
        not hex
   */
-          
-  byte slider_c_number[NUM_SLIDERS] =  {7, 11};    //the controller number
-  byte button_c_number[NUM_BUTTONS] =  {21, 22, 23, 24, 35};    //the controller number
+
+  byte slider_c_number[NUM_SLIDERS];              //the controller number
+  byte button_c_number[NUM_BUTTONS];  //the controller number
 };
+
+/*/As was pre 2024
+
+struct config_record {
+  byte chnl;                                            //midi channel
+  byte buttonChannel[NUM_BUTTONS] = { 2, 2, 2, 2, 2 };  //button midi channels as 1-16
+  byte sliderChannel[NUM_SLIDERS] = { 2, 2 };           //slider midi channels as 1-16
+  byte btnmode[NUM_BUTTONS] = { 0, 0, 1, 1, 2 };        //0 for normal 1 for toggle  2 for note mode
+                                                        //changed decmber 2023
+  
+    //   note the controller numbers here are in, *shudder* decimal
+    //   not hex
+  
+
+  byte slider_c_number[NUM_SLIDERS] = { 7, 11 };               //the controller number
+  byte button_c_number[NUM_BUTTONS] = { 21, 22, 23, 24, 36 };  //the controller number
+};
+
+*/
+
 
 /*
    This struct keeps the status of things happening at runtime together
-   You could just have each of the attributes as a separate global
+   You could just have each of the attributes as a separate globalbyte 
    but I like to keep them together
 */
 
 struct runtime_record {
-  int adc_prev[NUM_SLIDERS];                  //slider previous value
-  bool toggled[NUM_BUTTONS] = {false, false, false , false, false}; //  toggle indicates when toggle  in effect
+  int adc_prev[NUM_SLIDERS];                                          //slider previous value
+  bool toggled[NUM_BUTTONS] = { false, false, false, false, false };  //  toggle indicates when toggle  in effect
 };
 
 //now define variable that we use to reference the structs
@@ -271,7 +306,7 @@ struct runtime_record rtr;
 
 //button debounce objects
 
-Bounce button[5] = {Bounce(0, 5), Bounce(1, 5), Bounce(2, 5), Bounce(3, 5), Bounce(4, 5)}; // init 'bounce' for 5 buttons
+Bounce button[5] = { Bounce(0, 5), Bounce(1, 5), Bounce(2, 5), Bounce(3, 5), Bounce(4, 5) };  // init 'bounce' for 5 buttons
 
 
 // ResponsiveAnalogRead objects
@@ -291,54 +326,68 @@ void setup() {
 
   delay(500);
 
-  
+
   pinMode(ledPin, OUTPUT);
   pinMode(ledPinB, OUTPUT);
-  pinMode(0, INPUT_PULLUP); // set up three digital pins
-  pinMode(1, INPUT_PULLUP); // with PULLUPs
-  pinMode(2, INPUT_PULLUP); //  
-  pinMode(3, INPUT_PULLUP); //  
-  pinMode(4, INPUT_PULLUP); //  
-  
+  pinMode(0, INPUT_PULLUP);  // set up three digital pins
+  pinMode(1, INPUT_PULLUP);  // with PULLUPs
+  pinMode(2, INPUT_PULLUP);  //
+  pinMode(3, INPUT_PULLUP);  //
+  pinMode(4, INPUT_PULLUP);  //
+
 
   // init the thresholds for the ResponsiveAnalogeRead objects
 
   for (int n = 0; n < NUM_SLIDERS; n++) {
     analog_reads[n].setActivityThreshold(RAR_ACTIVITY_THRESHOLD);
   }
-                                      //to save sysexin here is a way to factory reset using
-                                      //the state of the pedals
+  //to save sysexin here is a way to factory reset using
+  //the state of the pedals
 
-  if ( digitalRead(0) == LOW) {
-     Serial.println("Factory Reset");   
-     save_config();                   //which will be the default state of the struct config is in    
-     blink_n_times(5,100,100);                                              
-  }            
-                                      //if factory default we could skit this but it take ms
-  
-  load_config();                      // load configuration from eeprom
- 
-  Serial.print("Started");            // tell the world we have hot this far
+  //load up defaults, then later if the saved config was valid it will be overwritten anyway
+  // and if stored config not good then the default will be written in 
+  loadDefaults();
+
+  if (digitalRead(0) == LOW) {
+    Serial.println("Factory Reset");
+    loadDefaults();
+    save_config();  //which will be the default state of the struct config is in
+    blink_n_times(5, 100, 100);
+  }
+  //if factory default we could skit this but it take ms
+
+  load_config();  // load configuration from eeprom
+
+  Serial.print("Started");  // tell the world we have hot this far
   digitalWrite(ledPinB, false);
-  blink_n_times(2,200,100);
+  blink_n_times(2, 200, 100);
 
   usbMIDI.setHandleSystemReset(mySystemReset);  //callback for when a sys reset arrives
   usbMIDI.setHandleSystemExclusive(mySysEx);
- 
 }
 
 
-void factoryReset(){
 
 
-  
+void loadDefaults() {
+
+  for (int n = 0; n < NUM_SLIDERS; n++) {
+    conf.sliderChannel[n] = factory_sliderChannel[n];
+    conf.slider_c_number[n] = factory_slider_c_number[n];
+  }
+
+  for (int n = 0; n < NUM_BUTTONS; n++) {
+    conf.buttonChannel[n] = factory_buttonChannel[n];
+    conf.button_c_number[n] = factory_button_c_number[n];
+    conf.btnmode[n] = factory_btnmode[n];
+  }
 }
 //===================================================================================================
 // *************THE MAIN LOOP************
 //===================================================================================================
 
 void loop() {
-  
+
   usbMIDI.read();
 
   /* or could use this mechanism
@@ -348,9 +397,8 @@ void loop() {
  */
 
   jtGetAnalogData();
-  getDigitalData(); // get/process digital pins
+  getDigitalData();  // get/process digital pins
   delay(main_delay);
- 
 }
 
 
@@ -370,32 +418,32 @@ void load_config() {
   unsigned long crc;
   unsigned long stored_crc;
 
-  int data_store_start = sizeof(unsigned long);   // we store our data in the eeprom AFTER the space
+  int data_store_start = sizeof(unsigned long);  // we store our data in the eeprom AFTER the space
   // reserved for the checksum/crc. That is stored
   // in an unsigned long integer so we need to know
   // how long one of those is as that will be the
   // first addrerss where data is stored.
 
-  EEPROM.get(0, stored_crc);                      // load the stored crc which is in address 0 of
-                                                  // the eeprom
-                                                
-                                                  // Serial.println("stored ");
-                                                  // Serial.print(stored_crc);
+  EEPROM.get(0, stored_crc);  // load the stored crc which is in address 0 of
+                              // the eeprom
 
-  crc = eeprom_crc(data_store_start);             // calculate the crc of what is IN the eeprom
-                                                  // Serial.println("calcd ");
-                                                  // Serial.print(crc);
+  // Serial.println("stored ");
+  // Serial.print(stored_crc);
+
+  crc = eeprom_crc(data_store_start);  // calculate the crc of what is IN the eeprom
+                                       // Serial.println("calcd ");
+                                       // Serial.print(crc);
 
 
-  if (crc != stored_crc) {                              // now make sure they are the same
-    Serial.println("CRC Check failed.Trying new save"); // send fail message to serial monitor
+  if (crc != stored_crc) {                               // now make sure they are the same
+    Serial.println("CRC Check failed.Trying new save");  // send fail message to serial monitor
 
     save_config();  //so try saving current config      // if not, use default values and try saving
-                                                        //  to eeprom again
+                    //  to eeprom again
     return;
   }
 
-  EEPROM.get(data_store_start, conf);                  //otherwise looks good so go and get the config
+  EEPROM.get(data_store_start, conf);  //otherwise looks good so go and get the config
 }
 
 
@@ -409,18 +457,18 @@ void load_config() {
 void save_config() {
   unsigned long crc;
 
-  int data_store_start = sizeof(unsigned long);   // we store our data in the eeprom AFTER the space
-                                                  // reserved for the checksum/crc. That is stored
-                                                  // in an unsigned long integer so we need to know
-                                                  // how long one of those is as that will be the
-                                                  // first addrerss where data is stored.
+  int data_store_start = sizeof(unsigned long);  // we store our data in the eeprom AFTER the space
+                                                 // reserved for the checksum/crc. That is stored
+                                                 // in an unsigned long integer so we need to know
+                                                 // how long one of those is as that will be the
+                                                 // first addrerss where data is stored.
   EEPROM.put(data_store_start, conf);
-  crc = eeprom_crc(data_store_start);             //now we calculate the crc for the contents of
-                                                  //the eprom EXCLUDING the checksum itself
-                                                  //which is store at the start of the eeprom
+  crc = eeprom_crc(data_store_start);  //now we calculate the crc for the contents of
+                                       //the eprom EXCLUDING the checksum itself
+                                       //which is store at the start of the eeprom
 
 
-  EEPROM.put(0, crc);                             //save the crc in the eeprom
+  EEPROM.put(0, crc);  //save the crc in the eeprom
 }
 
 //***************************************************************************************************
@@ -429,29 +477,27 @@ void save_config() {
 /*
  * you may wish to do more but all I need it to make sure any toggles are untoggeled!
  * 
- */ 
- void mySystemReset(){
+ */
+void mySystemReset() {
 
-   for (int i = 0; i < NUM_BUTTONS; i++) {
-        rtr.toggled[i] = false;                       
-      }
-  blink_n_times(1,500,100);  // blink our external LED  
-  
- }
+  for (int i = 0; i < NUM_BUTTONS; i++) {
+    rtr.toggled[i] = false;
+  }
+  blink_n_times(1, 500, 100);  // blink our external LED
+}
 
 //===================================================================================================
 // jtGetAnalogData
 //===================================================================================================
 void jtGetAnalogData() {
-  int adcValue = 0;                 // used to store value read from responsiveanalogread object
-  int valX;                         //used to store our 0-127 scaled version of the analog read value
+  int adcValue = 0;  // used to store value read from responsiveanalogread object
+  int valX;          //used to store our 0-127 scaled version of the analog read value
 
-  for (int n = 0; n < NUM_SLIDERS; n++)
-  {
-    analog_reads[n].update();                 //do the responsiveanalogread update
-    adcValue = analog_reads[n].getValue();    //read the value out from the adc
+  for (int n = 0; n < NUM_SLIDERS; n++) {
+    analog_reads[n].update();               //do the responsiveanalogread update
+    adcValue = analog_reads[n].getValue();  //read the value out from the adc
     //Serial.println(adcValue);               //when debugging it cann be useful to see values read
-                                              // to find your pdeal/sliders actual range
+    // to find your pdeal/sliders actual range
     valX = (map(adcValue, 60, 980, 0, 127));  //map the range of values we read somehwere 0-1024
                                               // to a range of 0-127 as wanted by midi
                                               //the lower and upper leverls will depend on your
@@ -459,16 +505,14 @@ void jtGetAnalogData() {
     valX = constrain(valX, 0, 127);           //ensure no negative values
 
 
-                                              //check if analog value has changed since we last sent it
-                                              // if so send it and save the value so next time around
-                                              // we know what its value WAS
+    //check if analog value has changed since we last sent it
+    // if so send it and save the value so next time around
+    // we know what its value WAS
     if (valX != rtr.adc_prev[n]) {
-      usbMIDI.sendControlChange(conf.slider_c_number[n], valX, conf.sliderChannel[n]); // calculate CC for analog   and send
+      usbMIDI.sendControlChange(conf.slider_c_number[n], valX, conf.sliderChannel[n]);  // calculate CC for analog   and send
       rtr.adc_prev[n] = valX;
     }
-
   }
-
 }
 
 
@@ -509,62 +553,59 @@ void getDigitalData() {
 
 void getDigitalData() {
   for (int i = 0; i < NUM_BUTTONS; i++) {
-    button[i].update(); //update bounce object for each button
-    
+    button[i].update();  //update bounce object for each button
+
     //button failling edge
-    
-    if (button[i].fallingEdge()) { // button press to ground
+
+    if (button[i].fallingEdge()) {  // button press to ground
 
       // if in toggle mode
-      if (rtr.toggled[i] && conf.btnmode[i] == CONTROL_TOGGLER) { // if toggled state and toggle behavoiour both true...
+      if (rtr.toggled[i] && conf.btnmode[i] == CONTROL_TOGGLER) {                      // if toggled state and toggle behavoiour both true...
         usbMIDI.sendControlChange(conf.button_c_number[i], 0, conf.buttonChannel[i]);  // unlatch to OFF
-        rtr.toggled[i] = false      ;  // toggled to false for next time
+        rtr.toggled[i] = false;                                                        // toggled to false for next time
 
 
-        
-      }
-      else { 
+
+      } else {
 
 
         //if in note mode...later make this a named constant eg
         //here the controller number value is used as the note number
-        if (conf.btnmode[i] == CONTROL_NOTEMODE){
-           usbMIDI.sendNoteOn(conf.button_c_number[i], 127, conf.buttonChannel[i]);
+        if (conf.btnmode[i] == CONTROL_NOTEMODE) {
+          usbMIDI.sendNoteOn(conf.button_c_number[i], 127, conf.buttonChannel[i]);
         } else {
-        // either latched and toggled==false or non-latched...
-        usbMIDI.sendControlChange(conf.button_c_number[i], 127, conf.buttonChannel[i]); //...either way to to ON state
+          // either latched and toggled==false or non-latched...
+          usbMIDI.sendControlChange(conf.button_c_number[i], 127, conf.buttonChannel[i]);  //...either way to to ON state
         }
         //now do the toggling
-        
+
         if (conf.btnmode[i] == 1) {
-          rtr.toggled[i] = true      ;  // but only change toggled state if in latched mode
+          rtr.toggled[i] = true;  // but only change toggled state if in latched mode
         }
-        
       }
     }
 
 
-  //button rising edge
-    
-    if (button[i].risingEdge()) { // button release - pullup to HIGH
+    //button rising edge
+
+    if (button[i].risingEdge()) {  // button release - pullup to HIGH
 
 
-        if (conf.btnmode[i] == 2){
-           usbMIDI.sendNoteOff(conf.button_c_number[i], 127, conf.buttonChannel[i]);
-        } 
+      if (conf.btnmode[i] == 2) {
+        usbMIDI.sendNoteOff(conf.button_c_number[i], 127, conf.buttonChannel[i]);
+      }
 
-        //here be a a poential hole!
-        //used to check for not toggle mode now need to also allow for note mode
-        /* old pree having 3 mdes version
+      //here be a a poential hole!
+      //used to check for not toggle mode now need to also allow for note mode
+      /* old pree having 3 mdes version
          *  
         if (not(conf.btnmode[i] == CONTROL_TOGGLER)) { // if non-latched
         usbMIDI.sendControlChange(conf.button_c_number[i], 0, conf.buttonChannel[i]);  // to to OFF
         }
         */
-        if (conf.btnmode[i] == CONTROL_MOMENTARY ) { // if non-latched
+      if (conf.btnmode[i] == CONTROL_MOMENTARY) {                                      // if non-latched
         usbMIDI.sendControlChange(conf.button_c_number[i], 0, conf.buttonChannel[i]);  // to to OFF
-        }
-        
+      }
     }
   }
 }
@@ -577,22 +618,21 @@ void getDigitalData() {
 // Support functions
 //===================================================================================
 
-void blink_n_times(int number_of_blinks, int ontime, int offtime){
+void blink_n_times(int number_of_blinks, int ontime, int offtime) {
 
-bool original_state;
-  original_state = digitalRead(ledPinB); //so we can put it back to how it was
+  bool original_state;
+  original_state = digitalRead(ledPinB);  //so we can put it back to how it was
   digitalWrite(ledPinB, false);
   delay(offtime);
-  for (int n=0; n < number_of_blinks; n++){
-     digitalWrite(ledPinB, true);
-     delay(ontime);
-     digitalWrite(ledPinB, false);
-     delay(offtime);  
+  for (int n = 0; n < number_of_blinks; n++) {
+    digitalWrite(ledPinB, true);
+    delay(ontime);
+    digitalWrite(ledPinB, false);
+    delay(offtime);
   }
 
-  delay(2*offtime);
-  digitalWrite(ledPinB,original_state);
-  
+  delay(2 * offtime);
+  digitalWrite(ledPinB, original_state);
 }
 //===================================================================================================
 // calculate crc
@@ -600,7 +640,7 @@ bool original_state;
 
 // crc code from https://www.arduino.cc/en/Tutorial/EEPROMCrc
 // modified as we dont want crc of entire eprom just a section
-// so this calcs crc from start_address to the end of the 
+// so this calcs crc from start_address to the end of the
 // eeprom
 
 unsigned long eeprom_crc(int start_address) {
@@ -614,7 +654,7 @@ unsigned long eeprom_crc(int start_address) {
 
   unsigned long crc = ~0L;
 
-  for (int index = start_address ; index < EEPROM.length()  ; ++index) {
+  for (int index = start_address; index < EEPROM.length(); ++index) {
     crc = crc_table[(crc ^ EEPROM[index]) & 0x0f] ^ (crc >> 4);
     crc = crc_table[(crc ^ (EEPROM[index] >> 4)) & 0x0f] ^ (crc >> 4);
     crc = ~crc;
