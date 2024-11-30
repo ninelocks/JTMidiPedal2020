@@ -1,3 +1,5 @@
+#include <_Teensy.h>
+
 
 #include <Bounce.h>
 #include <ResponsiveAnalogRead.h>
@@ -16,7 +18,8 @@
  * 
  * 
  * 
- * 
+ *
+2024/11/30 changed the default settings  
 2023/12/06 1.9
 fix bug of spurious control send
 
@@ -163,7 +166,7 @@ const byte CONTROL_NOTEMODE  = 2;
 // expression pedals
           /* version of firmware */
 const byte sysversionMajor = 1; //sent back to config manager application
-const byte sysversionMinor = 9; //rmember to changeif you want to identify anything
+const byte sysversionMinor = 10; //rmember to changeif you want to identify anything
 
           /* id for this device, in case I build others using similar sysex */
 const byte sysDevId = 1;        //ID of this device in case we haz multiple of them
@@ -219,17 +222,17 @@ const int SYSEX_SWITCH_TOGGLE_BASE     = 22;
 
 struct config_record {
   byte chnl; //midi channel
-  byte buttonChannel[NUM_BUTTONS] = {0, 0, 0, 0, 0};     //button midi channels as 1-16
-  byte sliderChannel[NUM_SLIDERS] = {0, 0};              //slider midi channels as 1-16
-  byte btnmode[NUM_BUTTONS] = {0, 0, 0, 0, 0}; //0 for normal 1 for toggle  2 for note mode
+  byte buttonChannel[NUM_BUTTONS] = {2, 2, 2, 2, 2};     //button midi channels as 1-16
+  byte sliderChannel[NUM_SLIDERS] = {2, 2};              //slider midi channels as 1-16
+  byte btnmode[NUM_BUTTONS] = {0, 0, 1, 1, 2}; //0 for normal 1 for toggle  2 for note mode
  //changed decmber 2023 
   /*
        note the controller numbers here are in, *shudder* decimal
        not hex
   */
           
-  byte slider_c_number[NUM_SLIDERS] =  {11, 81};    //the controller number
-  byte button_c_number[NUM_BUTTONS] =  {64, 65, 66, 67, 68};    //the controller number
+  byte slider_c_number[NUM_SLIDERS] =  {7, 11};    //the controller number
+  byte button_c_number[NUM_BUTTONS] =  {21, 22, 23, 24, 35};    //the controller number
 };
 
 /*
