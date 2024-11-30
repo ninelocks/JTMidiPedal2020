@@ -20,6 +20,24 @@
  * 
  *
 2024/11/30 changed the default settings  
+
+Switch Inputs
+
+
+S cc   type         channel     for 
+1 21  momentary     2
+2 22  momentary     2
+3 23  toggle        2
+4 24  toggle        2
+5 35  note          10          bass kick
+
+Pedals
+
+1 7                 2       (aka vol)
+2 11                2       (aka expr)
+
+
+
 2023/12/06 1.9
 fix bug of spurious control send
 
